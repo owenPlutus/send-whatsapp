@@ -46,7 +46,10 @@ const noopLogger = {
 //
 // Response 200: { "success": true }
 // Response 4xx/5xx: { "success": false, "error": "..." }
+let apiServerStarted = false;
 function startApiServer(sock) {
+    if (apiServerStarted) return;
+    apiServerStarted = true;
     const server = http.createServer(async (req, res) => {
         res.setHeader('Content-Type', 'application/json');
 
