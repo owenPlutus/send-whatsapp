@@ -40,65 +40,62 @@ const noopLogger = {
 };
 
 // ── HTTP API Server ───────────────────────────────────────────────────────────
-// POST /send-message
-// Headers: x-api-key: <API_KEY>
-// Body (JSON): { "to": "212605337823", "message": "Hello" }
-//
-// Response 200: { "success": true }
-// Response 4xx/5xx: { "success": false, "error": "..." }
-let apiServerStarted = false;
-function startApiServer(sock) {
-    if (apiServerStarted) return;
-    apiServerStarted = true;
-    const server = http.createServer(async (req, res) => {
-        res.setHeader('Content-Type', 'application/json');
+// Shared socket reference — updated on every reconnect
+let currentSock = null;
 
-        // Only accept POST /send-message
-        if (req.method !== 'POST' || req.url !== '/send-message') {
-            res.writeHead(404);
-            return res.end(JSON.stringify({ success: false, error: 'Not found' }));
-        }
+const server = http.createServer(async (req, res) => {
+    res.setHeader('Content-Type', 'application/json');
 
-        // Validate API key
-        const key = req.headers['x-api-key'];
-        if (!key || key !== API_KEY) {
-            res.writeHead(401);
-            return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
-        }
+    // Only accept POST /send-message
+    if (req.method !== 'POST' || req.url !== '/send-message') {
+        res.writeHead(404);
+        return res.end(JSON.stringify({ success: false, error: 'Not found' }));
+    }
 
-        // Parse request body
-        let body = '';
-        req.on('data', chunk => { body += chunk; });
-        req.on('end', async () => {
-            try {
-                const { to, message } = JSON.parse(body);
+    // Validate API key
+    const key = req.headers['x-api-key'];
+    if (!key || key !== API_KEY) {
+        res.writeHead(401);
+        return res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+    }
 
-                if (!to || !message) {
-                    res.writeHead(400);
-                    return res.end(JSON.stringify({ success: false, error: '"to" and "message" are required' }));
-                }
+    if (!currentSock) {
+        res.writeHead(503);
+        return res.end(JSON.stringify({ success: false, error: 'WhatsApp not connected yet' }));
+    }
 
-                // Normalise number → JID  (add @s.whatsapp.net if missing)
-                const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+    // Parse request body
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+        try {
+            const { to, message } = JSON.parse(body);
 
-                await sock.sendMessage(jid, { text: message });
-                console.log(`[API] Message sent to ${jid}`);
-
-                res.writeHead(200);
-                res.end(JSON.stringify({ success: true }));
-            } catch (err) {
-                console.error('[API] Error:', err.message);
-                res.writeHead(500);
-                res.end(JSON.stringify({ success: false, error: err.message }));
+            if (!to || !message) {
+                res.writeHead(400);
+                return res.end(JSON.stringify({ success: false, error: '"to" and "message" are required' }));
             }
-        });
-    });
 
-    server.listen(API_PORT, () => {
-        console.log(`[API] HTTP server listening on port ${API_PORT}`);
-        console.log(`[API] API key: ${API_KEY}`);
+            // Normalise number → JID  (add @s.whatsapp.net if missing)
+            const jid = to.includes('@') ? to : `${to}@s.whatsapp.net`;
+
+            await currentSock.sendMessage(jid, { text: message });
+            console.log(`[API] Message sent to ${jid}`);
+
+            res.writeHead(200);
+            res.end(JSON.stringify({ success: true }));
+        } catch (err) {
+            console.error('[API] Error:', err.message);
+            res.writeHead(500);
+            res.end(JSON.stringify({ success: false, error: err.message }));
+        }
     });
-}
+});
+
+server.listen(API_PORT, () => {
+    console.log(`[API] HTTP server listening on port ${API_PORT}`);
+    console.log(`[API] API key: ${API_KEY}`);
+});
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./auth');
@@ -131,9 +128,7 @@ async function startBot() {
             console.log('[INFO] Connecting to WhatsApp...');
         } else if (connection === 'open') {
             console.log('[INFO] Connection open — bot is ready.');
-
-            // Start the HTTP API server once WhatsApp is connected
-            startApiServer(sock);
+            currentSock = sock;
         } else if (connection === 'close') {
             const boom = lastDisconnect?.error instanceof Boom
                 ? lastDisconnect.error
