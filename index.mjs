@@ -92,10 +92,26 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
-server.listen(API_PORT, () => {
-    console.log(`[API] HTTP server listening on port ${API_PORT}`);
-    console.log(`[API] API key: ${API_KEY}`);
+function listenOnPort(port) {
+    server.listen(port, () => {
+        console.log(`[API] HTTP server listening on port ${port}`);
+        console.log(`[API] API key: ${API_KEY}`);
+    });
+}
+
+server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+        const currentPort = server.address()?.port ?? API_PORT;
+        const nextPort = Number(currentPort) + 1;
+        console.warn(`[API] Port ${currentPort} in use, trying ${nextPort}...`);
+        server.close();
+        listenOnPort(nextPort);
+    } else {
+        console.error('[API] Server error:', err.message);
+    }
 });
+
+listenOnPort(API_PORT);
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./auth');
