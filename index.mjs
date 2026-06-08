@@ -47,6 +47,12 @@ let currentSock = null;
 const server = http.createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
 
+    // Health check endpoint for Railway
+    if (req.url === '/healthz') {
+        res.writeHead(200);
+        return res.end(JSON.stringify({ ok: true, connected: !!currentSock }));
+    }
+
     // Only accept POST /send-message
     if (req.method !== 'POST' || req.url !== '/send-message') {
         res.writeHead(404);
@@ -202,5 +208,6 @@ async function startBot() {
 // ── Entry point ──────────────────────────────────────────────────────────────
 startBot().catch((err) => {
     console.error('[FATAL] Unhandled startup error:', err);
-    process.exit(1);
+    // Do NOT exit — keep the HTTP server alive so Railway health checks pass
+    // and so the API can return a meaningful 503 instead of a 502
 });
