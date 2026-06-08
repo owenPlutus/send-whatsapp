@@ -8,7 +8,8 @@ import qrcode from 'qrcode-terminal';
 import http from 'http';
 
 // ── API Configuration ─────────────────────────────────────────────────────────
-const API_PORT = process.env.API_PORT || 3000;
+// Railway injects PORT automatically; fall back to API_PORT or 3000
+const API_PORT = process.env.PORT || process.env.API_PORT || 3000;
 const API_KEY = process.env.API_KEY || '5c6efa298f1b1c0b21ebbe3470d787836d579388158100707edd553b94ca0f90';
 
 // ── Suppress Baileys Signal-protocol noise ───────────────────────────────────
@@ -92,22 +93,15 @@ const server = http.createServer(async (req, res) => {
     });
 });
 
-function listenOnPort(port) {
-    server.once('error', (err) => {
-        if (err.code === 'EADDRINUSE') {
-            console.warn(`[API] Port ${port} in use, trying ${port + 1}...`);
-            listenOnPort(port + 1);
-        } else {
-            console.error('[API] Server error:', err.message);
-        }
-    });
-    server.listen(port, () => {
-        console.log(`[API] HTTP server listening on port ${port}`);
-        console.log(`[API] API key: ${API_KEY}`);
-    });
-}
+server.listen(Number(API_PORT), () => {
+    console.log(`[API] HTTP server listening on port ${API_PORT}`);
+    console.log(`[API] API key: ${API_KEY}`);
+});
 
-listenOnPort(Number(API_PORT));
+server.on('error', (err) => {
+    console.error('[API] Server error:', err.message);
+    process.exit(1);
+});
 
 async function startBot() {
     const { state, saveCreds } = await useMultiFileAuthState('./auth');
