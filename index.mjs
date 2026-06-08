@@ -130,6 +130,7 @@ async function startBot() {
             console.log('[INFO] Connection open — bot is ready.');
             currentSock = sock;
         } else if (connection === 'close') {
+            currentSock = null; // Mark as disconnected so API returns 503
             const boom = lastDisconnect?.error instanceof Boom
                 ? lastDisconnect.error
                 : null;
